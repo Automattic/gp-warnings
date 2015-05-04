@@ -1,0 +1,7 @@
+<?php
+
+return array(
+	'German' => array( 'de' ),
+	'French' => array( 'fr', 'fr-ca' ),
+	'Chinese' => array( 'zh-tw', 'zh-cn' ),
+);

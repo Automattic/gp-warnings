@@ -1,7 +1,12 @@
 <?php
 /**
+ * Plugin name: GlotPress: Warnings Dashboard
+ * Plugin author: Automattic
+ * Version: 1.0
  *
+ * Description: Gives an overview of the warnings in a whole project, across locales.
  */
+
 
 class GP_Route_Warnings extends GP_Route_Main {
 	public $segments = array();
@@ -21,7 +26,7 @@ class GP_Route_Warnings extends GP_Route_Main {
 		$translation_sets = GP::$translation_set->by_project_id( $project->id );
 		if ( ! $translation_sets ) $this->die_with_404();
 
-		global $gpdb;
+		global $wpdb;
 
 		$segments = new GP_Warnings_Segments( $this->segments );
 
@@ -38,29 +43,42 @@ class GP_Route_Warnings extends GP_Route_Main {
 
 		$sql_for_warnings = "
 			SELECT t.translation_set_id, SUM( t.status = 'current') AS current, SUM( t.status = 'waiting') AS waiting, SUM( t.status = 'fuzzy') AS fuzzy
-			FROM $gpdb->originals as o
-			INNER JOIN $gpdb->translations AS t ON o.id = t.original_id AND t.translation_set_id IN( ".$gpdb->escape( implode( ',', $translation_set_ids ) )." )
-			WHERE o.project_id = " . $gpdb->escape( $project->id )." AND o.status LIKE '+%'
+			FROM $wpdb->gp_originals as o
+			INNER JOIN $wpdb->gp_translations AS t ON o.id = t.original_id AND t.translation_set_id IN( ".$wpdb->escape( implode( ',', $translation_set_ids ) )." )
+			WHERE o.project_id = " . $wpdb->escape( $project->id )." AND o.status LIKE '+%'
 			AND t.warnings IS NOT NULL AND t.warnings != '' AND t.status IN ('current', 'waiting', 'fuzzy')
 			GROUP BY t.translation_set_id HAVING COUNT(*) > 0
 			ORDER BY " . $segments->order_by( 't.translation_set_id' ) . ", SUM( t.status = 'current') DESC
 		";
 
-		$warnings = $gpdb->get_results( $sql_for_warnings );
+		$warnings = $wpdb->get_results( $sql_for_warnings );
 
 		$this->tmpl( 'warnings', get_defined_vars() );
 	}
 }
 
-class GP_Warnings_Loader extends GP_Plugin {
-	function __construct() {
-		parent::__construct();
-		$this->init_new_routes();
-		$this->add_filter( 'gp_project_actions', array( 'args' => 2 ) );
+class GP_Warnings  {
+	private static $instance = null;
+
+	public static function init() {
+		self::get_instance();
 	}
 
-	function init_new_routes() {
-		GP::$router->insert( '/projects/(.+?)/-warnings', array( 'GP_Route_Warnings', 'show' ), 'get' );
+	public static function get_instance() {
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
+	}
+
+	function __construct() {
+		add_action( 'template_redirect', array( $this, 'register_routes' ), 5 );
+		add_filter( 'gp_project_actions', array( $this, 'gp_project_actions' ), 5, 2 );
+	}
+
+	function register_routes() {
+		GP::$router->prepend( '/projects/(.+?)/-warnings', array( 'GP_Route_Warnings', 'show' ), 'get' );
 	}
 
 	function gp_project_actions( $actions, $project ) {
@@ -122,5 +140,5 @@ class GP_Warnings_Segments {
 }
 
 
-GP::$plugins->Warnings = new GP_Warnings_Loader();
+add_action( 'gp_init', array( 'GP_Warnings', 'init' ) );
 
